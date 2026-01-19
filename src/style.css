@@ -42,7 +42,7 @@ body {
   overflow: hidden;
   scrollbar-width: none;
 
-  --van-back-top-bottom: 7.5rem;
+  cursor: none;
 }
 
 h1 {

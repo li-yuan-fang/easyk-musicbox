@@ -43,13 +43,13 @@
       </div>
 
       <!-- 歌词面板 -->
-      <div class="player-panel-lyrics-space" v-if="lyrics.length > 0" />
-      <div class="player-panel-lyrics" v-if="lyrics.length > 0">
+      <div class="player-panel-lyrics-space" v-if="lyric_valid()" />
+      <div class="player-panel-lyrics" v-if="lyric_valid()">
         <div
           class="player-lyrics-wrapper"
-          :style="{ transform: `translateY(calc(${getHalfHeight()}px - ${calcActiveSublines()} * var(--player-lyric-font-size-common) * var(--player-lyric-line-height-rate) - ${active_lyric} * 2 * var(--player-lyric-line-padding) - var(--player-lyric-font-size-active) * ${lyrics[active_lyric]?.text.length || 0} / 2 - var(--player-lyric-line-padding)))` }"
+          :style="{ transform: `translateY(calc(${getHalfHeight()}px - ${lyric_translation?.offset[active_lyric]?.plain || 0} * var(--player-lyric-font-size-common) * var(--player-lyric-line-height-rate) - ${active_lyric} * 2 * var(--player-lyric-line-padding) - var(--player-lyric-font-size-active) * var(--player-lyric-line-height-rate) * ${lyric_translation?.self[active_lyric]?.plain || 0} - var(--player-lyric-line-padding)))` }"
         >
-          <div 
+          <div
             v-for="(line, index) in lyrics" 
             :key="index"
             :class="{ 
@@ -57,8 +57,11 @@
             }"
             class="player-lyric-line"
           >
+            <!-- 逐字行 -->
+
+            <!-- 简易行 -->
             <div
-              v-for="(ver, j) in line.text"
+              v-for="(ver, j) in (line.plain || [])"
               :key="j"
               class="player-lyric-text"
             >
@@ -91,12 +94,10 @@
 </template>
 
 <script setup lang="ts">
+import { Mutex } from 'async-mutex';
 import { ref, onMounted, watch } from 'vue'
-
-interface Lyrics {
-  time: number;
-  text: Array<string>;
-}
+import type { LyricLine, LyricTranslationTable } from './common/types';
+import { generateTranslateTable } from './common/lyrics';
 
 const panel_main = ref()
 
@@ -113,13 +114,29 @@ const album = ref<string>('')
 const playing = ref<boolean>(false)
 //播放进度(0-1)
 const current = ref<number>(0)
+//播放速度
+const rate = ref<number>(1.0)
 //总长度(单位:s)
 const total = ref<number>(0)
 
-//歌词
-const lyrics = ref<Array<Lyrics>>([])
+//进度锚点锁
+const anchor_lock = new Mutex()
+//进度锚点(0-1)
+const anchor_pos = ref<number>(0)
+//进度锚点时间戳(单位:ms)
+const anchor_time = ref<number>(0)
 
-//标题
+//进度状态定时器
+const intervalState = ref()
+
+//歌词
+const lyrics = ref<Array<LyricLine>>([])
+//歌词偏移
+const lyric_translation = ref<LyricTranslationTable | undefined>(undefined)
+
+const lyric_valid = () : boolean => lyrics.value.length > 0 && lyric_translation.value != undefined
+
+// //标题
 // const title = ref<string>('キズナミュージック♪')
 // //创作者
 // const artist = ref<string>('Poppin\'Party')
@@ -136,39 +153,21 @@ const lyrics = ref<Array<Lyrics>>([])
 // //歌词
 // const lyrics = ref<Array<Lyrics>>([{"time":0.0,"text":[" 作词 : 中村航"]},{"time":1.0,"text":[" 作曲 : 藤永龍太郎"]},{"time":2.0,"text":[" 编曲 : 藤永龍太郎"]},{"time":10.79,"text":["教室の窓の外 はしゃぐ声","教室窗外传来嬉闹的声音"]},{"time":15.65,"text":["木漏れ日は キラ キラ降り注いで","树叶空隙的阳光显得格外闪耀"]},{"time":20.86,"text":["毎日が特別だった場所に","在这每日都格外特殊的地方"]},{"time":25.81,"text":["みんな また集まってた","大家又聚集在一起"]},{"time":29.89,"text":["わたしたちが つながってる意味","我们故事交互的意义"]},{"time":36.02,"text":["たぶん…偶然じゃない","应该...并非是偶然"]},{"time":39.74,"text":["だ って音を合わせたら——","如果音符交织在一起的话——"]},{"time":45.66,"text":["キズナミュージック?","Kizuna music?"]},{"time":48.25,"text":["ただひたむきに 追いかけていた","只是想一心不乱的追赶"]},{"time":53.38,"text":["胸の奥の思い 気づいたら","内心深处的想法，也终于发觉"]},{"time":58.18,"text":["（みんなで）地図を広げて","（与大家）拿出地图"]},{"time":61.43,"text":["キボウの道を ジグザグ進もう！","在希望的道路上 曲曲折折的前进！"]},{"time":65.83,"text":["キズナミュージック?","Kizuna music?"]},{"time":68.56,"text":["大好きな歌 約束の歌 永遠の歌","那最棒的歌 那约定的歌 那永远的歌"]},{"time":76.25,"text":["届けよう！わたしたちいつだって","传递吧！我们永远都会"]},{"time":81.01,"text":["精一杯！Forever for dreaming！","竭尽全力！Forever for dreaming！"]},{"time":85.53,"text":["夢の向こうへ——","向着梦想前进——"]},{"time":96.93,"text":["出会ったときのこと 覚えている？","相遇的场景 你还铭记于心吗？"]},{"time":101.97,"text":["あふれだす思い 響きあう夢","思绪泛滥 梦想的回响"]},{"time":107.14,"text":["気づいたら 傷ついて傷つけて","回过头来 虽然伤痕累累"]},{"time":112.14,"text":["絆 また深まってた","但羁绊 继续升华"]},{"time":116.00999999999999,"text":["五人だけが 知っていること","仅仅知道我们有五个人"]},{"time":122.29,"text":["たぶん…すぐ思いだす","应该...做些什么呢"]},{"time":126.08,"text":["歌が教えてくれるよ","音乐会告诉你的哟"]},{"time":131.96,"text":["キズナミュージック?","Kizuna music?"]},{"time":134.7,"text":["あの 橋渡リ あの丘を越え","度过桥梁 跨越山丘"]},{"time":139.71,"text":["その壁を越えたら キミがいた","突破那阻碍 有你在"]},{"time":144.71,"text":["（会いたね）標識のない","（想念）没有迹象"]},{"time":147.76,"text":["迷いの道も キミとなら行ける","在这迷茫的道路上你与我形影不离"]},{"time":152.2,"text":["キズナミュージック?","Kizuna music?"]},{"time":155.05,"text":["大切な歌 青春の歌 始まりの歌","那珍贵的歌 那青春之曲 那初生的歌"]},{"time":162.59,"text":["奏でよう！何度でもいつまでも","一同演奏 不管多少次都"]},{"time":167.38,"text":["精一杯！Forever for dreaming！","竭尽全力 Forever for dreaming"]},{"time":171.93,"text":["歌を信じる——","相信着这歌声——"]},{"time":217.05,"text":["いつか 思い出に変わったとき","总有一 天 会变成回忆的时候"]},{"time":224.07,"text":["この歌を聴いたなら","当再次听到这首歌的时候"]},{"time":227.54,"text":["どんなことを感じるかな？","会是怎样的心情呢？"]},{"time":231.4,"text":["愛しくて 優しく 嬉しくて 切なかった","怜爱 温柔 喜悦 悲伤什么的"]},{"time":238.14,"text":["思いすべて 抱きしめ——","我都会一并接受——"]},{"time":245.55,"text":["キズナ ミュージック?","Kizuna music?"]},{"time":247.83,"text":["心震えて 勇気あふれて","心跳不已 无所畏惧"]},{"time":252.93,"text":["涙がでちゃいそう","热泪盈眶"]},{"time":256.39,"text":["歌おうよ（みんなで）声高らかに","歌唱吧（与大家）去高歌"]},{"time":260.83,"text":["明日の歌を 未来への歌を！","向着明日未来而歌唱！"]},{"time":265.59,"text":["そんな…","这样的..."]},{"time":268.86,"text":["ミュージック?","Music?"]},{"time":270.72,"text":["大好きな歌 約束の歌 永遠の歌","那最棒的歌 那约定的歌 那永远的歌"]},{"time":278.25,"text":["届けよう！わたしたちいつだって","传递吧！我们永远都会"]},{"time":282.88,"text":["精一杯！Forever for dreaming！","竭尽全力！Forever for dreaming！"]},{"time":286.93,"text":["キミと一緒だよ","你也一同！"]},{"time":289.46,"text":["Forever for dreaming！","Forever for dreaming！"]},{"time":292.77,"text":["キミを 信じる——","我相信着你——"]}])
 
-// onMounted(() => {
-//   let interval = setInterval(() => {
-//     current.value += 1 / total.value
-//     if (current.value >= 1) {
-//       playing.value = false
-//       clearInterval(interval)
-//     }
-//   }, 1000)
-// })
-
 //格式化时间
 const formatTime = (seconds : number) => {
   let min = Math.floor(seconds / 60)
-  let sec = Math.round(seconds % 60)
+  let sec = Math.floor(seconds % 60)
   return `${min}:${sec < 10 ? '0' + sec : sec}`
 }
 
 const active_lyric = ref<number>(0)
 
-const calcActiveSublines = () : number => {
-  let sum = 0
-  for (let i = 0; i < active_lyric.value; i++) {
-    sum += lyrics.value[i]?.text.length || 0
-  }
-  return sum
-}
-
-const updateLyric = (value : number) => {
+const updateActiveLyric = (value : number) => {
   if (lyrics.value.length == 0) return
 
   let active : number = 0
   
-  value *= total.value
+  value *= total.value * 1000
   try {
     lyrics.value.forEach((line, index) => {
       if (value >= line.time) {
@@ -183,7 +182,7 @@ const updateLyric = (value : number) => {
   active_lyric.value = active
 }
 
-watch(current, updateLyric)
+watch(current, updateActiveLyric)
 
 const setTitle = (t : string) => title.value = t
 
@@ -191,30 +190,69 @@ const setArtist = (a : string) => artist.value = a
 
 const setAlbum = (a : string) => album.value = a
 
-const setPlaying = (p : boolean) => playing.value = p
+const setPlaying = (p : boolean) => {
+  playing.value = p
+  if (!intervalState.value && p)
+    intervalState.value = setInterval(updateProgress, 10)
+}
 
-const setCurrent = (c : number) => current.value = c
+const setCurrent = (c : number) => {
+  current.value = Math.abs((c - current.value) * total.value) < 0.5 ? Math.max(c, current.value) : c
+
+  anchor_lock.acquire().then((release) => {
+    anchor_pos.value = current.value
+    anchor_time.value = Date.now()
+    release()
+  })
+}
 
 const setTotal = (t : number) => total.value = t
 
-const setLyric = (id : string, lrc : Array<Lyrics>) => {
+const setRate = (r : number) => rate.value = r
+
+const setLyric = (id : string, lrc : Array<LyricLine>) => {
   switch (id) {
     case 'Netease':
       lyrics.value = lrc
-      updateLyric(current.value)
+      lyric_translation.value = generateTranslateTable(lrc)
+      updateActiveLyric(current.value)
       break
   }
 }
 
-//拉取状态定时器
-const intervalState = ref()
+const pull_cnt = ref<number>(0)
 
-//拉取状态
-const pullState = () => {
-  easy_k.queryState()
+//进度状态控制
+const updateProgress = () => {
+  pull_cnt.value = (++pull_cnt.value) % 300
+  if (pull_cnt.value == 0) {
+    //拉取状态更新
+    try {
+      easy_k.queryState()
+    } catch {
+    }
+  }
+  
+  //更新锚点
+  anchor_lock.acquire().then((release) => {
+    if (playing.value) {
+      let offset = (Date.now() - anchor_time.value) * rate.value / 1000
 
-  if (current.value >= 1)
+      if (offset <= total.value)
+        current.value = offset / total.value + anchor_pos.value
+    } else {
+      anchor_time.value = Date.now()
+    }
+
+    release()
+  })
+
+  //退出机制
+  if (current.value >= 1) {
+    playing.value = false
     clearInterval(intervalState.value)
+    intervalState.value = undefined
+  }
 }
 
 onMounted(() => {
@@ -224,13 +262,21 @@ onMounted(() => {
   window['setAlbum'] = setAlbum
   window['setPlaying'] = setPlaying
   window['setCurrent'] = setCurrent
+  window['setRate'] = setRate
   window['setTotal'] = setTotal
   window['setLyric'] = setLyric
 
   //拉取基本信息
-  easy_k.queryMusic()
+  try {
+    easy_k.queryMusic()
+  } catch {
+  }
 
-  intervalState.value = setInterval(pullState, 300)
+  //初始化进度锚点
+  anchor_time.value = Date.now()
+
+  //启动进度拉取定时器
+  intervalState.value = setInterval(updateProgress, 10)
 })
 
 </script>
