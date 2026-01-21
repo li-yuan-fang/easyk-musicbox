@@ -17,15 +17,19 @@ export default defineConfig(({ mode }) => {
       {
         name: 'favicon-handler',
         transformIndexHtml(html : string) {
-          // 开发环境注入图标链接
-          if (!isProduction) {
+          if (isProduction) {
+            // 生产环境移除图标标签 并隐藏鼠标
+            return html.replace(/<link rel="icon".*?>/g, '').replace(
+              '</head>',
+              '<style>.player-instance{cursor: none;}</style></head>'
+            )
+          } else {
+            // 开发环境注入图标链接
             return html.replace(
               '</head>',
-              '<link rel="icon" href="/favicon.ico"></head>'
+              '<link rel="icon" href="/favicon.ico" /></head>'
             )
           }
-          // 生产环境移除图标标签
-          return html.replace(/<link rel="icon".*?>/g, '')
         }
       },
     ],
