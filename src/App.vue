@@ -61,10 +61,11 @@
             class="player-lyric-line"
           >
             <!-- 带假名逐字行 -->
-            <div class="player-lyric-verbatim-kana player-lyric-inline">
+            <div class="player-lyric-wrapper player-lyric-verbatim-kana player-lyric-inline">
               <div
                 v-for="(vk, j) in (line.verbatimK || [])"
                 :key="j"
+                class="player-lyric-verbatim-main"
               >
                 <div class="player-lyric-inline">
                   <div
@@ -85,7 +86,7 @@
               </div>
             </div>
             <!-- 逐字行 -->
-            <div class="player-lyric-inline player-lyric-text">
+            <div class="player-lyric-wrapper player-lyric-inline player-lyric-text">
               <div
                 v-for="(v, j) in (line.verbatim || [])"
                 :key="j"
@@ -680,6 +681,10 @@ onMounted(() => {
   justify-content: center;
 }
 
+.player-lyric-wrapper {
+  flex-flow: row wrap;
+}
+
 .player-lyric-verbatim {
   color: transparent;
   -webkit-text-fill-color: transparent;
@@ -687,6 +692,10 @@ onMounted(() => {
 }
 
 .player-lyric-roma {
+  margin: 0 max(0.26vh, 0.125rem);
+}
+
+.player-lyric-verbatim-main {
   margin: 0 max(0.26vh, 0.125rem);
 }
 
