@@ -701,8 +701,8 @@ onMounted(() => {
 }
 
 .player-lyric-roma {
+  font-weight: 600;
   margin: 0 max(0.26vh, 0.125rem);
-  font-weight: bold;
 }
 
 .player-lyric-verbatim-main {
