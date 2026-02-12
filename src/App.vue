@@ -168,6 +168,8 @@ const intervalState = ref()
 
 //歌词
 const lyrics = ref<Array<LyricLine>>([])
+//歌词偏移
+const lyric_offset = ref<number>(0)
 //歌词颜色
 const lyric_color = ref<string>('#fff')
 //背景遮罩透明度
@@ -199,6 +201,9 @@ const lyric_valid = () : boolean => lyrics.value.length > 0
 // //背景遮罩透明度
 // const background_alpha = ref<number>(0.4)
 
+//计算歌词时间
+const calcLyricPosition = () : number => current.value * total.value * 1000 + lyric_offset.value
+
 //格式化时间
 const formatTime = (seconds : number) => {
   let min = Math.floor(seconds / 60)
@@ -214,7 +219,7 @@ const updateActiveLyric = () => {
 
   let active : number = 0
   
-  let value = current.value * total.value * 1000
+  let value = calcLyricPosition()
   try {
     lyrics.value.forEach((line, index) => {
       if (value >= line.time) {
@@ -254,7 +259,7 @@ const generateVerbatimStyle = (background : string) => {
 const calcVerbatimBackground = (v : VerbatimLyric | Kana, index : number) => {
   if (index != active_lyric.value) return generateVerbatimStyle('var(--player-lyric-line-color)')
 
-  let value = total.value * current.value * 1000
+  let value = calcLyricPosition()
 
   if (value >= v.end) {
     return generateVerbatimStyle('linear-gradient(to right, var(--player-lyric-read) 0%, var(--player-lyric-read) 100%)')
@@ -302,6 +307,10 @@ const setLyric = (lrc : Array<LyricLine>) => {
 const setLyricColor = (r : number, g : number, b : number, a : number) => {
   lyric_color.value = `rgb(${r}, ${g}, ${b})`
   background_alpha.value = a
+}
+
+const setOffset = (o : number) => {
+  lyric_offset.value = o
 }
 
 const pull_cnt = ref<number>(0)
@@ -352,6 +361,7 @@ onMounted(() => {
   window['setTotal'] = setTotal
   window['setLyric'] = setLyric
   window['setLyricColor'] = setLyricColor
+  window['setOffset'] = setOffset
 
   //初始化进度锚点
   anchor_time.value = Date.now()
