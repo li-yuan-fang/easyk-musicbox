@@ -168,6 +168,8 @@ const intervalState = ref()
 
 //歌词
 const lyrics = ref<Array<LyricLine>>([])
+//歌词进度(单位:ms)
+const lyric_current = ref<number>(0)
 //歌词偏移
 const lyric_offset = ref<number>(0)
 //歌词颜色
@@ -201,8 +203,10 @@ const lyric_valid = () : boolean => lyrics.value.length > 0
 // //背景遮罩透明度
 // const background_alpha = ref<number>(0.4)
 
-//计算歌词时间
-const calcLyricPosition = () : number => current.value * total.value * 1000 + lyric_offset.value
+//更新歌词时间
+const updateLyricPosition = () => {
+  lyric_current.value = current.value * total.value * 1000 + lyric_offset.value
+}
 
 //格式化时间
 const formatTime = (seconds : number) => {
@@ -219,10 +223,9 @@ const updateActiveLyric = () => {
 
   let active : number = 0
   
-  let value = calcLyricPosition()
   try {
     lyrics.value.forEach((line, index) => {
-      if (value >= line.time) {
+      if (lyric_current.value >= line.time) {
         active = index
       } else {
         throw new DOMException()
@@ -259,16 +262,14 @@ const generateVerbatimStyle = (background : string) => {
 const calcVerbatimBackground = (v : VerbatimLyric | Kana, index : number) => {
   if (index != active_lyric.value) return generateVerbatimStyle('var(--player-lyric-line-color)')
 
-  let value = calcLyricPosition()
-
-  if (value >= v.end) {
+  if (lyric_current.value >= v.end) {
     return generateVerbatimStyle('linear-gradient(to right, var(--player-lyric-read) 0%, var(--player-lyric-read) 100%)')
   }
-  if (value < v.start || v.start == v.end) {
+  if (lyric_current.value < v.start || v.start == v.end) {
     return generateVerbatimStyle('linear-gradient(to right, var(--player-lyric-unread) 0%, var(--player-lyric-unread) 100%)')
   }
 
-  let rate = (value - v.start) / (v.end - v.start) * 100
+  let rate = (lyric_current.value - v.start) / (v.end - v.start) * 100
   return generateVerbatimStyle(`linear-gradient(to right, var(--player-lyric-read) 0%, var(--player-lyric-read) ${rate}%, var(--player-lyric-unread) ${rate}%, var(--player-lyric-unread) 100%)`)
 }
 
@@ -286,6 +287,7 @@ const setPlaying = (p : boolean) => {
 
 const setCurrent = (c : number) => {
   current.value = Math.abs((c - current.value) * total.value) < 0.5 ? Math.max(c, current.value) : c
+  updateLyricPosition()
   updateActiveLyric()
 
   anchor_lock.acquire().then((release) => {
@@ -333,6 +335,7 @@ const updateProgress = () => {
 
       if (offset <= total.value) {
         current.value = offset / total.value + anchor_pos.value
+        updateLyricPosition()
         updateActiveLyric()
       }
     } else {

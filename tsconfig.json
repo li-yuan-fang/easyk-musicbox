@@ -7,5 +7,10 @@
     {
       "path": "./tsconfig.app.json"
     }
-  ]
+  ],
+  "compilerOptions": {
+    "noEmitOnError": false,  // 有错误仍然输出文件
+    "skipLibCheck": true,     // 跳过库类型检查
+    "isolatedModules": true     // 确保文件可独立编译
+  }
 }
