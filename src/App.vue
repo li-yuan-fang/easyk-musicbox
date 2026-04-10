@@ -70,7 +70,10 @@
               'player-lyric-line-active': index === active_lyric
             }"
             class="player-lyric-line"
-            :style="(lyric_k && index === active_lyric) ? 'padding-bottom: 0;' : ''"
+            :style="{
+              paddingTop: (lyric_k && index === active_lyric + 1) ? '0' : '',
+              paddingBottom: (lyric_k && index === active_lyric) ? '0' : ''
+            }"
           >
             <!-- 带假名逐字行 -->
             <div class="player-lyric-wrapper player-lyric-verbatim-kana player-lyric-inline">
@@ -231,7 +234,7 @@ const formatTime = (seconds : number) => {
 }
 
 //当前歌词行
-const active_lyric = ref<number>(5)
+const active_lyric = ref<number>(0)
 
 const updateActiveLyric = () => {
   if (lyrics.value.length == 0) return
@@ -665,15 +668,15 @@ onMounted(() => {
   mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    black 10%,
-    black 90%,
+    black 15%,
+    black 85%,
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    black 10%,
-    black 90%,
+    black 15%,
+    black 85%,
     transparent 100%
   );
 
