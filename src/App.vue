@@ -11,7 +11,11 @@
 
     <div class="player-panel">
       <!-- 主面板 -->
-      <div class="player-panel-main" ref="panel_main">
+      <div
+        class="player-panel-main"
+        ref="panel_main"
+        :style="{ maxWidth: lyric_valid() ? '30vw' : 'unset' }"
+      >
         <!-- 黑胶唱片区域 -->
         <div class="player-vinyl-container">
           <div class="player-vinyl-wrapper">
@@ -31,8 +35,8 @@
         </div>
 
         <div class="player-title-container">
-          <h2 class="player-title">{{ title }}</h2>
-          <p class="player-artist">{{ artist }}</p>
+          <h2 class="player-title player-word-break">{{ title }}</h2>
+          <p class="player-artist player-word-break">{{ artist }}</p>
         </div>
 
         <div class="player-progress-container">
@@ -190,7 +194,7 @@ const lyric_valid = () : boolean => lyrics.value.length > 0
 // //标题
 // const title = ref<string>('キズナミュージック♪')
 // //创作者
-// const artist = ref<string>('Poppin\'Party')
+// const artist = ref<string>('Poppin\'Party/Afterglow/Pastel*Palettes/Roselia/HelloHappy World! (八口一、八”e—D一儿!)/Morfonica (毛儿才二力)/RAISE A SUILEN')
 // //专辑封面
 // const album = ref<string>('http://p1.music.126.net/tY3kQom9zTUwux6PUZ6r0Q==/109951172068985822.jpg')
 
@@ -593,6 +597,11 @@ onMounted(() => {
   font-weight: 500;
   color: #fff;
   margin: 0 0 0.6vh 0;
+}
+
+.player-word-break {
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .player-artist {
