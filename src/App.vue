@@ -1,8 +1,12 @@
 <template>
   <!-- 主容器 -->
   <div
+    ref="targetRef"
     class="player-container player-instance"
-    :style="{ backgroundColor: `rgba(0, 0, 0, ${background_alpha})` }"
+    :style="{
+      backgroundColor: `rgba(0, 0, 0, ${background_alpha})`,
+      cursor: isHidden ? 'none !important' : 'auto'
+    }"
   >
 
     <div class="player-panel">
@@ -134,9 +138,10 @@
 </template>
 
 <script setup lang="ts">
-import { Mutex } from 'async-mutex';
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import type { Kana, LyricLine, VerbatimLyric } from './common/types';
+import { Mutex } from 'async-mutex';
+import { useAutoHideCursor } from './common/useAutoHideCursor';
 
 const panel_main = ref()
 
@@ -165,6 +170,9 @@ const anchor_time = ref<number>(0)
 
 //进度状态定时器
 const intervalState = ref()
+
+//鼠标自动隐藏
+const { targetRef, isHidden } = useAutoHideCursor(2000)
 
 //歌词
 const lyrics = ref<Array<LyricLine>>([])

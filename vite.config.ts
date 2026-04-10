@@ -18,11 +18,14 @@ export default defineConfig(({ mode }) => {
         name: 'favicon-handler',
         transformIndexHtml(html : string) {
           if (isProduction) {
-            // 生产环境移除图标标签 并隐藏鼠标
-            return html.replace(/<link rel="icon".*?>/g, '').replace(
-              '</head>',
-              '<style>.player-instance{cursor: none;}</style></head>'
-            )
+            // 生产环境移除图标标签
+            return html.replace(/<link rel="icon".*?>/g, '')
+            
+            //隐藏鼠标代码
+            // .replace(
+            //   '</head>',
+            //   '<style>.player-instance{cursor: none;}</style></head>'
+            // )
           } else {
             // 开发环境注入图标链接
             return html.replace(
