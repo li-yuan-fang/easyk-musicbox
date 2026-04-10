@@ -70,6 +70,7 @@
               'player-lyric-line-active': index === active_lyric
             }"
             class="player-lyric-line"
+            :style="(lyric_k && index === active_lyric) ? 'padding-bottom: 0;' : ''"
           >
             <!-- 带假名逐字行 -->
             <div class="player-lyric-wrapper player-lyric-verbatim-kana player-lyric-inline">
@@ -188,6 +189,8 @@ const lyric_offset = ref<number>(0)
 const lyric_color = ref<string>('#fff')
 //背景遮罩透明度
 const background_alpha = ref<number>(0.2)
+//K歌模式
+const lyric_k = ref<boolean>(false)
 
 const lyric_valid = () : boolean => lyrics.value.length > 0
 
@@ -228,7 +231,7 @@ const formatTime = (seconds : number) => {
 }
 
 //当前歌词行
-const active_lyric = ref<number>(0)
+const active_lyric = ref<number>(5)
 
 const updateActiveLyric = () => {
   if (lyrics.value.length == 0) return
@@ -256,7 +259,11 @@ const getLyricTranslation = () : number => {
   let active = document.getElementsByClassName('player-lyric-line-active')
   if (active.length > 0 && active[0]) {
     offset -= (<HTMLElement> active[0]).offsetTop
-    offset -= (<HTMLElement> active[0]).offsetHeight / 2
+    if (lyric_k.value) {
+      offset -= (<HTMLElement> active[0]).offsetHeight
+    } else {
+      offset -= (<HTMLElement> active[0]).offsetHeight / 2
+    }
   }
 
   return offset
@@ -323,6 +330,8 @@ const setLyricColor = (r : number, g : number, b : number, a : number) => {
   background_alpha.value = a
 }
 
+const setLyricKMode = (k : boolean) => lyric_k.value = k
+
 const setOffset = (o : number) => {
   lyric_offset.value = o
 }
@@ -376,6 +385,7 @@ onMounted(() => {
   window['setTotal'] = setTotal
   window['setLyric'] = setLyric
   window['setLyricColor'] = setLyricColor
+  window['setLyricKMode'] = setLyricKMode
   window['setOffset'] = setOffset
 
   //初始化进度锚点
@@ -655,15 +665,15 @@ onMounted(() => {
   mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    black 20%,
-    black 80%,
+    black 10%,
+    black 90%,
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    black 20%,
-    black 80%,
+    black 10%,
+    black 90%,
     transparent 100%
   );
 
