@@ -706,7 +706,7 @@ onMounted(() => {
   --player-lyric-font-size: max(1.4rem, 3.0vh);
   --player-lyric-verbatim-font-size: max(1.75rem, 3.6vh);
   --player-lyric-verbatim-line-height-rate: 1.5;
-  --player-lyric-kana-font-size: max(1.3rem, 2.8vh);
+  --player-lyric-kana-font-size: max(1.4rem, 3.0vh);
   --player-lyric-kana-line-height-rate: 1.0;
   --player-lyric-roma-font-size: max(1.3rem, 2.8vh);
   --player-lyric-roma-line-height-rate: 1.25;
