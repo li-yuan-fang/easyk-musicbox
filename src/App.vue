@@ -256,6 +256,15 @@ const updateActiveLyric = () => {
   } catch {
   }
 
+  if (active < lyrics.value.length - 1) {
+    //对逐字歌词尽可能歌词提前
+    let v = lyrics.value[active]?.verbatimK || lyrics.value[active]?.verbatim
+    if (v) {
+      let last = v.slice(-1)[0]
+      if (last && lyric_current.value >= last.end) active++
+    }
+  }
+
   active_lyric.value = active
 }
 
