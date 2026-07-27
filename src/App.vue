@@ -92,11 +92,15 @@
                     {{ kana.content }}
                   </div>
                 </div>
-                <div
-                  class="player-lyric-verbatim"
-                  :style="calcVerbatimBackground(vk, index)"
-                >
-                  {{ vk.content }}
+                <div class="player-lyric-inline">
+                  <div
+                    v-for="(text, c) in (vk.text || [])"
+                    :key="c"
+                    class="player-lyric-verbatim"
+                    :style="calcVerbatimBackground(text, index)"
+                  >
+                    {{ text.content }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -147,7 +151,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import type { Kana, LyricLine, VerbatimLyric } from './common/types';
+import type { LyricLine, VerbatimLyricBase } from './common/types';
 import { Mutex } from 'async-mutex';
 import { useAutoHideCursor } from './common/useAutoHideCursor';
 
@@ -257,11 +261,24 @@ const updateActiveLyric = () => {
   }
 
   if (active < lyrics.value.length - 1) {
-    //对逐字歌词尽可能歌词提前
-    let v = lyrics.value[active]?.verbatimK || lyrics.value[active]?.verbatim
-    if (v) {
-      let last = v.slice(-1)[0]
-      if (last && lyric_current.value >= last.end) active++
+    //对逐字歌词尽可能歌词提前(基本逐字行和复杂逐字单元分开处理)
+    if (lyrics.value[active]?.verbatimK) {
+      //复杂逐字单元
+      let v = lyrics.value[active]?.verbatimK
+      if (v) {
+        let last_unit = v.slice(-1)[0]
+        if (last_unit) {
+          let last_text = last_unit.text.slice(-1)[0]
+          if (last_text && lyric_current.value >= last_text.end) active++
+        }
+      }
+    } else if (lyrics.value[active]?.verbatim) {
+      //基本逐字行
+      let v = lyrics.value[active]?.verbatim
+      if (v) {
+        let last = v.slice(-1)[0]
+        if (last && lyric_current.value >= last.end) active++
+      }
     }
   }
 
@@ -300,7 +317,7 @@ const generateVerbatimStyle = (background : string) => {
 }
 
 //计算逐字背景
-const calcVerbatimBackground = (v : VerbatimLyric | Kana, index : number) => {
+const calcVerbatimBackground = (v : VerbatimLyricBase, index : number) => {
   if (index != active_lyric.value) return generateVerbatimStyle('var(--player-lyric-line-color)')
 
   if (lyric_current.value >= v.end) {

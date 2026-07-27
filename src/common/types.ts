@@ -1,29 +1,27 @@
 
 export type {
     LyricLine,
-    VerbatimLyric,
-    Kana
+    VerbatimLyricBody,
+    VerbatimLyricBase
 }
 
 interface LyricLine {
     //起始时间
     time: number;
     //允许带假名的逐字行
-    verbatimK?: Array<VerbatimLyric>;
+    verbatimK?: Array<VerbatimLyricBody>;
     //逐字行
-    verbatim?: Array<VerbatimLyric>;
+    verbatim?: Array<VerbatimLyricBase>;
     //简易行
     plain?: Array<string>;
 }
 
-interface VerbatimLyric {
-    start: number;
-    end: number;
-    content: string;
-    kana?: Array<Kana>;
+interface VerbatimLyricBody {
+    text: Array<VerbatimLyricBase>;
+    kana?: Array<VerbatimLyricBase>;
 }
 
-interface Kana {
+interface VerbatimLyricBase {
     start: number;
     end: number;
     content: number;
