@@ -158,6 +158,8 @@ import type { LyricLine, MusicAttribute, VerbatimLyricBase } from './common/type
 import { Mutex } from 'async-mutex';
 import { useAutoHideCursor } from './common/useAutoHideCursor';
 
+const current_sync_time : number = 300
+
 const panel_main = ref()
 
 const attribute = ref<MusicAttribute>({
@@ -180,16 +182,11 @@ const anchor_pos = ref<number>(0)
 //进度锚点时间戳(单位:ms)
 const anchor_time = ref<number>(0)
 
-//进度状态定时器
-const intervalState = ref()
-
 //鼠标自动隐藏
 const { targetRef, isHidden } = useAutoHideCursor(2000)
 
 //歌词
 const lyrics = ref<Array<LyricLine>>([])
-//歌词进度(单位:ms)
-const lyric_current = ref<number>(0)
 //歌词偏移
 const lyric_offset = ref<number>(0)
 //歌词颜色
@@ -201,12 +198,13 @@ const background_alpha = ref<number>(0.2)
 //K歌模式(双层歌词)
 const lyric_intersect = ref<boolean>(false)
 
+//渲染回调ID
+const render_id = ref<number>(-1)
+
 const lyric_valid = () : boolean => lyrics.value.length > 0
 
-//更新歌词时间
-const updateLyricPosition = () => {
-    lyric_current.value = current.value * attribute.value.total * 1000 + lyric_offset.value
-}
+//歌词进度(单位:ms)
+const lyric_current = computed(() => current.value * attribute.value.total * 1000 + lyric_offset.value)
 
 //格式化时间
 const formatTime = (seconds : number) => {
@@ -333,13 +331,10 @@ const setAttribute = (a : MusicAttribute) => attribute.value = a
 
 const setPlaying = (p : boolean) => {
     playing.value = p
-    if (!intervalState.value && p)
-        intervalState.value = setInterval(updateProgress, 10)
 }
 
 const setCurrent = (c : number) => {
     current.value = Math.abs((c - current.value) * attribute.value.total) < 0.5 ? Math.max(c, current.value) : c
-    updateLyricPosition()
     updateActiveLyric()
 
     anchor_lock.acquire().then((release) => {
@@ -371,7 +366,7 @@ const pull_cnt = ref<number>(0)
 
 //进度状态控制
 const updateProgress = () => {
-    pull_cnt.value = (pull_cnt.value++) % 300
+    pull_cnt.value = (++pull_cnt.value) % current_sync_time
     if (pull_cnt.value == 0) {
         //拉取状态更新
         try {
@@ -387,7 +382,6 @@ const updateProgress = () => {
 
             if (offset <= attribute.value.total) {
                 current.value = offset / attribute.value.total + anchor_pos.value
-                updateLyricPosition()
                 updateActiveLyric()
             }
         } else {
@@ -400,9 +394,15 @@ const updateProgress = () => {
     //退出机制
     if (current.value >= 1) {
         playing.value = false
-        clearInterval(intervalState.value)
-        intervalState.value = undefined
+
+        cancelAnimationFrame(render_id.value)
+        render_id.value = -1
     }
+}
+
+const render = () => {
+    updateProgress()
+    render_id.value = requestAnimationFrame(render)
 }
 
 onMounted(() => {
@@ -419,8 +419,21 @@ onMounted(() => {
     //初始化进度锚点
     anchor_time.value = Date.now()
 
-    //启动进度拉取定时器
-    intervalState.value = setInterval(updateProgress, 10)
+    //开始请求渲染回调
+    render_id.value = requestAnimationFrame(render)
+
+    //发起首次同步请求
+    setTimeout(() => {
+        //拉取状态更新
+        try {
+            easy_k.queryState()
+        } catch {
+        }
+    }, 100)
+})
+
+onUnmounted(() => {
+    if (render_id.value >= 0) cancelAnimationFrame(render_id.value)
 })
 
 </script>
