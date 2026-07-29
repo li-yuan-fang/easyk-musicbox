@@ -371,7 +371,7 @@ const pull_cnt = ref<number>(0)
 
 //进度状态控制
 const updateProgress = () => {
-    pull_cnt.value = (++pull_cnt.value) % 300
+    pull_cnt.value = (pull_cnt.value++) % 300
     if (pull_cnt.value == 0) {
         //拉取状态更新
         try {
