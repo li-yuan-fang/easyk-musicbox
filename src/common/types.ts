@@ -24,5 +24,5 @@ interface VerbatimLyricBody {
 interface VerbatimLyricBase {
     start: number;
     end: number;
-    content: number;
+    content: string;
 }
