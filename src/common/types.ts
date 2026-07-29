@@ -2,7 +2,8 @@
 export type {
     LyricLine,
     VerbatimLyricBody,
-    VerbatimLyricBase
+    VerbatimLyricBase,
+    MusicAttribute
 }
 
 interface LyricLine {
@@ -25,4 +26,11 @@ interface VerbatimLyricBase {
     start: number;
     end: number;
     content: string;
+}
+
+interface MusicAttribute {
+    title: string;
+    artist: string;
+    album?: string;
+    total: number;
 }
