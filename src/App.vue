@@ -43,11 +43,11 @@
                     <span class="player-progress-current">{{ formatTime(current * attribute.total) }}</span>
                     <input
                         class="player-progress-bar"
-                        :value="Math.round(current * 1000)"
+                        :value="progress_value"
                         type="range"
                         min="0"
-                        max="1000"
-                        :style="{ backgroundSize: `${(current * 100).toFixed(1)}% 100%` }"
+                        :max="progress_accuracy"
+                        :style="{ backgroundSize: `${(current * 100).toFixed(progress_accuracy_log)}% 100%` }"
                     />
                     <span class="player-progress-total">{{ formatTime(attribute.total) }}</span>
                 </div>
@@ -155,13 +155,39 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import type { LyricLine, MusicAttribute, VerbatimLyricBase } from './common/types';
-import { Mutex } from 'async-mutex';
 import { useAutoHideCursor } from './common/useAutoHideCursor';
 
-const current_sync_time : number = 300
+interface EasyKBridge {
+    queryState: () => void;
+}
 
+declare global {
+    var easy_k: EasyKBridge;
+
+    interface Window {
+        setAttribute: (a : MusicAttribute) => void;
+        setPlayState: (p : boolean, c : number, r : number) => void;
+        setLyric: (lrc : Array<LyricLine>) => void;
+        setLyricColor: (r : number, g : number, b : number, a : number) => void;
+        setLyricIntersectMode: (i : boolean) => void;
+        setOffset: (o : number) => void;
+    }
+}
+
+//拉取进度间隔(单位:帧)
+const current_sync_time : number = 180
+
+//主面板引用
 const panel_main = ref()
 
+//进度精度
+const progress_accuracy : number = 1000
+//进度精度(对数)
+const progress_accuracy_log : number = Math.log10(progress_accuracy / 100)
+//计算进度值
+const progress_value = computed(() => Math.round(current.value * progress_accuracy))
+
+//歌曲属性
 const attribute = ref<MusicAttribute>({
     title: '',
     artist: '',
@@ -173,14 +199,7 @@ const playing = ref<boolean>(false)
 //播放进度(0-1)
 const current = ref<number>(0)
 //播放速度
-const rate = ref<number>(1.0)
-
-//进度锚点锁
-const anchor_lock = new Mutex()
-//进度锚点(0-1)
-const anchor_pos = ref<number>(0)
-//进度锚点时间戳(单位:ms)
-const anchor_time = ref<number>(0)
+let rate : number = 1.0
 
 //鼠标自动隐藏
 const { targetRef, isHidden } = useAutoHideCursor(2000)
@@ -198,8 +217,26 @@ const background_alpha = ref<number>(0.2)
 //K歌模式(双层歌词)
 const lyric_intersect = ref<boolean>(false)
 
+//进度锚点(0-1)
+let anchor_pos : number = 0
+//进度锚点时间戳(单位:ms)
+let anchor_time : number = 0
+//外部进度提交值
+let current_commit : number = -1
+//外部进度提交时间
+let current_commit_time : number = 0
+
 //渲染回调ID
-const render_id = ref<number>(-1)
+let render_id : number = -1
+//进度拉取冷却计数
+let pull_cnt : number = 0
+
+//当前歌词行
+const active_lyric = ref<number>(0)
+//当前歌词行起始位置
+let active_start : number = 0
+//下一歌词行起始位置
+let active_next : number = -1
 
 const lyric_valid = () : boolean => lyrics.value.length > 0
 
@@ -213,13 +250,10 @@ const formatTime = (seconds : number) => {
     return `${min}:${sec < 10 ? '0' + sec : sec}`
 }
 
-//当前歌词行
-const active_lyric = ref<number>(0)
-
 const calcActiveLyric = (start : number) : number => {
     let active : number = start
     for (let i = start; i < lyrics.value.length; i++) {
-        if (lyric_current.value >= lyrics.value[i].time) {
+        if (lyric_current.value >= lyrics.value[i]!.time) {
             active = i
         } else {
             break
@@ -229,12 +263,42 @@ const calcActiveLyric = (start : number) : number => {
     return active
 }
 
+const calcLyricEndTime = (index : number) : number => {
+    //基本逐字行和复杂逐字单元分开处理
+    if (lyrics.value[index]?.verbatimK) {
+        //复杂逐字单元
+        let v = lyrics.value[index]?.verbatimK
+        if (v) {
+            let last_unit = v.slice(-1)[0]
+            if (last_unit) {
+                let last_text = last_unit.text.slice(-1)[0]
+                if (last_text) return last_text.end
+            }
+        }
+    } else if (lyrics.value[index]?.verbatim) {
+        //基本逐字行
+        let v = lyrics.value[index]?.verbatim
+        if (v) {
+            let last = v.slice(-1)[0]
+            if (last) return last.end
+        }
+    }
+
+    return -1
+}
+
 const updateActiveLyric = () => {
     if (lyrics.value.length == 0) return
 
+    //缓存检查
+    if (active_next >= 0) {
+        //如果命中当前区间 则跳过更新
+        if (lyric_current.value >= active_start && lyric_current.value < active_next) return
+    }
+
     let active : number = 0
     
-    if (lyric_current.value >= lyrics.value[active_lyric.value].time) {
+    if (lyric_current.value >= lyrics.value[active_lyric.value]!.time) {
         //进度正常推进
         active = calcActiveLyric(active_lyric.value)
     } else {
@@ -242,30 +306,51 @@ const updateActiveLyric = () => {
         active = calcActiveLyric(0)
     }
 
+    //对逐字歌词尽可能歌词提前
     if (active < lyrics.value.length - 1) {
-        //对逐字歌词尽可能歌词提前(基本逐字行和复杂逐字单元分开处理)
-        if (lyrics.value[active]?.verbatimK) {
-            //复杂逐字单元
-            let v = lyrics.value[active]?.verbatimK
-            if (v) {
-                let last_unit = v.slice(-1)[0]
-                if (last_unit) {
-                    let last_text = last_unit.text.slice(-1)[0]
-                    if (last_text && lyric_current.value >= last_text.end) active++
-                }
-            }
-        } else if (lyrics.value[active]?.verbatim) {
-            //基本逐字行
-            let v = lyrics.value[active]?.verbatim
-            if (v) {
-                let last = v.slice(-1)[0]
-                if (last && lyric_current.value >= last.end) active++
-            }
-        }
+        let next_time = calcLyricEndTime(active)
+        if (next_time >= 0 && lyric_current.value >= next_time) active++
+    }
+
+    //更新当前活动行边界
+    if (active_next >= 0 && active == (active_lyric.value + 1)) {
+        //先前计算过active_next 直接采用
+        active_start = active_next
+    } else if (active <= 0) {
+        //第一行 固定起始边界为0
+        active_start = 0
+    } else {
+        //重新计算active_start
+        active_start = lyrics.value[active]!.time
+
+        //前面已经判断不是第一行 可以直接往前推
+        let next_time = calcLyricEndTime(active - 1)
+        if (next_time >= 0 && active_start > next_time) active_start = next_time
+    }
+
+    if (active < lyrics.value.length - 1) {
+        active_next = lyrics.value[active + 1]!.time
+
+        //尝试是否有更早的切换点(与逐字歌词提前同理)
+        let next_time = calcLyricEndTime(active)
+        if (next_time >= 0 && active_next > next_time) active_next = next_time
+    } else {
+        //最后一行
+        active_next = Number.POSITIVE_INFINITY
     }
 
     active_lyric.value = active
 }
+
+//响应式更新当前活动歌词
+watch(
+    [lyric_current, lyrics],
+    updateActiveLyric,
+    {
+        flush: 'pre',
+        immediate: true
+    }
+)
 
 //计算当前歌词偏移
 const calcLyricTranslation = () : number => {
@@ -295,6 +380,7 @@ const updateLyricTranslation = async () => {
     lyric_translation.value = calcLyricTranslation()
 }
 
+//响应式更新滑动偏移
 watch(
     [active_lyric, lyric_intersect, lyrics],
     updateLyricTranslation,
@@ -329,27 +415,23 @@ const calcVerbatimBackground = (v : VerbatimLyricBase, index : number) => {
 
 const setAttribute = (a : MusicAttribute) => attribute.value = a
 
-const setPlaying = (p : boolean) => {
+const setPlayState = (p : boolean, c : number, r : number) => {
     playing.value = p
+
+    rate = r
+
+    current_commit_time = performance.now()
+    current_commit = c
+
+    if (p && c < 1) {
+        if (render_id < 0) {
+            //启动渲染
+            render_id = requestAnimationFrame(render)
+        }
+    }
 }
 
-const setCurrent = (c : number) => {
-    current.value = Math.abs((c - current.value) * attribute.value.total) < 0.5 ? Math.max(c, current.value) : c
-    updateActiveLyric()
-
-    anchor_lock.acquire().then((release) => {
-        anchor_pos.value = current.value
-        anchor_time.value = Date.now()
-        release()
-    })
-}
-
-const setRate = (r : number) => rate.value = r
-
-const setLyric = (lrc : Array<LyricLine>) => {
-    lyrics.value = lrc
-    updateActiveLyric()
-}
+const setLyric = (lrc : Array<LyricLine>) => lyrics.value = lrc
 
 const setLyricColor = (r : number, g : number, b : number, a : number) => {
     lyric_color.value = `rgb(${r}, ${g}, ${b})`
@@ -358,16 +440,12 @@ const setLyricColor = (r : number, g : number, b : number, a : number) => {
 
 const setLyricIntersectMode = (i : boolean) => lyric_intersect.value = i
 
-const setOffset = (o : number) => {
-    lyric_offset.value = o
-}
-
-const pull_cnt = ref<number>(0)
+const setOffset = (o : number) => lyric_offset.value = o
 
 //进度状态控制
-const updateProgress = () => {
-    pull_cnt.value = (++pull_cnt.value) % current_sync_time
-    if (pull_cnt.value == 0) {
+const updateProgress = () : boolean => {
+    pull_cnt = (++pull_cnt) % current_sync_time
+    if (pull_cnt == 0) {
         //拉取状态更新
         try {
             easy_k.queryState()
@@ -376,51 +454,71 @@ const updateProgress = () => {
     }
     
     //更新锚点
-    anchor_lock.acquire().then((release) => {
-        if (playing.value) {
-            let offset = (Date.now() - anchor_time.value) * rate.value / 1000
+    if (attribute.value.total > 0) {
+        if (current_commit >= 0) {
+            //接受提交
+            let now = performance.now()
+            if (playing.value) {
+                let offset = (now - current_commit_time) * rate / 1000
+                let c = current_commit + (offset / attribute.value.total)
 
-            if (offset <= attribute.value.total) {
-                current.value = offset / attribute.value.total + anchor_pos.value
-                updateActiveLyric()
+                anchor_pos = (Math.abs((c - current.value) * attribute.value.total) < 0.5) ?
+                                Math.max(c, current.value) :
+                                c
+                anchor_time = now
+            } else {
+                anchor_pos = current_commit
+                anchor_time = now
             }
-        } else {
-            anchor_time.value = Date.now()
-        }
 
-        release()
-    })
+            current_commit = -1
+            current.value = anchor_pos
+        } else {
+            //内部推进
+            if (playing.value) {
+                let offset = (performance.now() - anchor_time) * rate / 1000
+
+                if (offset <= attribute.value.total) {
+                    current.value = offset / attribute.value.total + anchor_pos
+                }
+            } else {
+                anchor_time = performance.now()
+            }
+        }
+    }
+    
 
     //退出机制
     if (current.value >= 1) {
         playing.value = false
-
-        cancelAnimationFrame(render_id.value)
-        render_id.value = -1
+        return false
     }
+
+    return true
 }
 
 const render = () => {
-    updateProgress()
-    render_id.value = requestAnimationFrame(render)
+    if (updateProgress()) {
+        render_id = requestAnimationFrame(render)
+    } else {
+        render_id = -1
+    }
 }
 
 onMounted(() => {
     //暴露方法到外部
-    window['setAttribute'] = setAttribute
-    window['setPlaying'] = setPlaying
-    window['setCurrent'] = setCurrent
-    window['setRate'] = setRate
-    window['setLyric'] = setLyric
-    window['setLyricColor'] = setLyricColor
-    window['setLyricIntersectMode'] = setLyricIntersectMode
-    window['setOffset'] = setOffset
+    window.setAttribute = setAttribute
+    window.setPlayState = setPlayState
+    window.setLyric = setLyric
+    window.setLyricColor = setLyricColor
+    window.setLyricIntersectMode = setLyricIntersectMode
+    window.setOffset = setOffset
 
     //初始化进度锚点
-    anchor_time.value = Date.now()
+    anchor_time = performance.now()
 
     //开始请求渲染回调
-    render_id.value = requestAnimationFrame(render)
+    render_id = requestAnimationFrame(render)
 
     //发起首次同步请求
     setTimeout(() => {
@@ -433,7 +531,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-    if (render_id.value >= 0) cancelAnimationFrame(render_id.value)
+    if (render_id >= 0) cancelAnimationFrame(render_id)
 })
 
 </script>
