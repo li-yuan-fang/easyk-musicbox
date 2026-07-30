@@ -837,7 +837,7 @@ onUnmounted(() => {
 }
 
 .player-lyrics-wrapper {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform;
 }
 
@@ -848,9 +848,9 @@ onUnmounted(() => {
     color: var(--player-lyric-line-color);
     opacity: 0.4;
     transition: 
-        opacity 0.2s ease,
-        transform 0.2s ease,
-        text-shadow 0.2s ease;
+        opacity 0.3s ease,
+        transform 0.3s ease,
+        text-shadow 0.3s ease;
     will-change: opacity, transform;
     font-size: var(--player-lyric-font-size);
     transform: scale(var(--player-lyric-font-size-mini-rate));
